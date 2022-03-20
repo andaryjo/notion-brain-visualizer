@@ -1,0 +1,19 @@
+{
+  "name": "notion-brain-visualizer",
+  "description": "Tool to visualize backlink dependencies of your Notion workspace as graph diagram.",
+  "version": "0.1.0",
+  "main": "server.js",
+  "author": "Andary",
+  "license": "ISC",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hapi/hapi": "^20.2.1",
+    "@hapi/inert": "^6.0.5",
+    "@notionhq/client": "^1.0.4"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
+  }
+}

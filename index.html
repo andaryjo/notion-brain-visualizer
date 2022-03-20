@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="de">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
+
+    <title>Notion Brain</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/vis-network@9.1.0/standalone/umd/vis-network.min.js"></script>
+
+    <style type="text/css">
+        [data-theme="light"],
+        :root:not([data-theme="dark"]) {
+            --primary: #F57C00;
+            --primary-hover: #E65100;
+
+        }
+
+        @media only screen and (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --primary: #F57C00;
+                --primary-hover: #E65100;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container" x-data="data()">
+        <nav>
+            <ul>
+                <li><strong>Notion Brain</strong></li>
+            </ul>
+            <ul>
+                <li x-show="storedGraphAvailable"><button @click="redirectToGraph()">Load stored graph</button></li>
+            </ul>
+        </nav>
+        <div>
+            <label for="token">Paste your Integration Token</label>
+            <input type="password" id="token" name="token" placeholder="Integration Token" x-model="token" required>
+            <button x-bind:aria-busy="loading" @click="submit()" x-text="buttonText"></button>
+            <small x-show="error" x-text="error"></small>
+            <progress x-show="loading" x-bind:value="noPagesQueried" x-bind:max="noPages"></progress>
+
+        </div>
+    </main>
+
+    <script type="text/javascript">
+        const data = () => {
+            return {
+                loading: false,
+                buttonText: 'Let\'s go',
+                error: null,
+                token: null,
+                noPages: 0,
+                noPagesQueried: 0,
+                storedGraphAvailable: false,
+                init: async function () {
+
+                    let storedData = localStorage.getItem('graphData');
+                    if (storedData) this.storedGraphAvailable = true;
+
+                    this.token = localStorage.getItem('token');
+                },
+                submit: async function () {
+                    if (!this.token) return;
+                    localStorage.setItem('token', this.token);
+                    this.error = null;
+                    this.loading = true;
+
+                    let success = await this.loadGraphData();
+                    if (success) this.redirectToGraph();
+                },
+                redirectToGraph: function () {
+                    console.log("hey");
+                    window.location.href = './graph';
+                },
+                loadGraphData: async function () {
+                    let pages = [];
+                    let nodes = [];
+                    let edges = [];
+
+                    // Load all pages from search
+                    let nextPage = '';
+                    while (nextPage != null) {
+                        const data = await this.getPages(this.token, nextPage);
+
+                        for (obj of data.results) {
+                            if (obj.object == 'page') {
+                                pages[obj.id] = {
+                                    name: obj.properties.title.title[0].plain_text,
+                                    queried: false
+                                }
+                                this.noPages++;
+                            }
+                        }
+
+                        if (data.has_more) nextPage = data.next_cursor;
+                        else nextPage = null;
+                    }
+
+                    console.log("yo");
+                    console.log("queried: " + this.noPagesQueried);
+                    console.log("pages: " + this.noPages);
+
+                    // As long as there are still pages that have not been queried, loop through all pages
+                    // For a page that has not been queried before, fetch all child blocks
+                    // If a child block is a mention of another page, enter the connection and add the mentioned page to the pages array
+                    // If a child block is a subpage, enter the connection and add the mentioned page to the pages array
+
+                    while (this.noPagesQueried < this.noPages) {
+                        for (page in pages) {
+                            if (pages[page].queried) continue;
+
+                            this.buttonText = `Fetching ${pages[page].name}`
+                            console.log(`query children for page ${page} (${pages[page].name})`);
+
+                            let nextBlock = '';
+                            while (nextBlock != null) {
+                                const data = await this.getBlockChildren(this.token, page, nextBlock);
+
+                                for (obj of data.results) {
+                                    let newPage = null;
+
+                                    if (obj.type == 'child_page') {
+
+                                        newPage = {
+                                            id: obj.id,
+                                            name: obj.child_page.title
+                                        }
+
+                                        edges.push({ from: page, to: obj.id })
+
+                                    } else if (obj.type == 'paragraph' || obj.type == 'bulleted_list_item') {
+
+                                        let content = [];
+                                        if (obj.type == 'paragragh') content = obj.paragraph.rich_text;
+                                        else if (obj.type == 'bulleted_list_item') content = obj.bulleted_list_item.rich_text;
+
+                                        for (textObj of content) {
+                                            if (textObj.type == 'mention') {
+                                                newPage = {
+                                                    id: textObj.mention.page.id,
+                                                    name: textObj.plain_text
+                                                }
+
+                                                edges.push({ from: page, to: textObj.mention.page.id })
+                                            }
+                                        }
+                                    }
+
+                                    if (newPage) {
+                                        if (!(newPage.id in pages)) {
+                                            pages[newPage.id] = {
+                                                name: newPage.name,
+                                                queried: false
+                                            }
+
+                                            console.log(`add new page ${newPage.id} (${newPage.name})`);
+                                            this.noPages++;
+                                        }
+                                    }
+                                }
+
+                                if (data.has_more) nextBlock = data.next_cursor;
+                                else nextBlock = null;
+                            }
+
+                            pages[page].queried = true;
+                            this.noPagesQueried++;
+                        }
+                    }
+
+                    for (page in pages) {
+                        nodes.push({
+                            id: page,
+                            label: pages[page].name
+                        });
+                    }
+
+                    localStorage.setItem('graphData', JSON.stringify({ nodes, edges }));
+                    return true;
+                },
+                getPages: function (token, start_cursor) {
+                    return new Promise(async (resolve, reject) => {
+                        let path = './proxy/search';
+                        if (start_cursor) path += `?start_cursor=${start_cursor}`
+
+                        try {
+                            const res = await axios.get(path, { headers: { 'Authorization': `Bearer ${token}` } });
+                            resolve(res.data);
+                        } catch (err) {
+                            console.log(err.message);
+                            this.loading = false;
+                            this.error = err.message;
+                            reject();
+                        }
+                    });
+                },
+                getBlockChildren: function (token, id, start_cursor) {
+                    return new Promise(async (resolve, reject) => {
+                        let path = `./proxy/blocks/${id}/children`;
+                        if (start_cursor) path += `?start_cursor=${start_cursor}`
+
+                        try {
+                            const res = await axios.get(path, { headers: { 'Authorization': `Bearer ${token}` } });
+                            resolve(res.data);
+                        } catch (err) {
+                            console.log(err.message);
+                            reject();
+                        }
+                    });
+                }
+            }
+        }
+    </script>
+
+</body>
+
+</html>
