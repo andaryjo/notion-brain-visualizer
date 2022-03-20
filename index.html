@@ -42,8 +42,10 @@
             </ul>
         </nav>
         <div>
-            <label for="token">Paste your Integration Token</label>
-            <input type="password" id="token" name="token" placeholder="Integration Token" x-model="token" required>
+            <label for="tokenInput">Paste your Integration Token</label>
+            <input type="password" id="tokenInput" name="tokenInput" placeholder="Integration Token" x-model="token" required>
+            <input type="checkbox" id="backlinksInput" name="backlinksInput" x-model="considerBacklinks">Include backlinks as edges</input>
+            <br><br>
             <button x-bind:aria-busy="loading" @click="submit()" x-text="buttonText"></button>
             <small x-show="error" x-text="error"></small>
             <progress x-show="loading" x-bind:value="noPagesQueried" x-bind:max="noPages"></progress>
@@ -61,8 +63,8 @@
                 noPages: 0,
                 noPagesQueried: 0,
                 storedGraphAvailable: false,
+                considerBacklinks: true,
                 init: async function () {
-
                     let storedData = localStorage.getItem('graphData');
                     if (storedData) this.storedGraphAvailable = true;
 
@@ -78,7 +80,6 @@
                     if (success) this.redirectToGraph();
                 },
                 redirectToGraph: function () {
-                    console.log("hey");
                     window.location.href = './graph';
                 },
                 loadGraphData: async function () {
@@ -104,10 +105,6 @@
                         if (data.has_more) nextPage = data.next_cursor;
                         else nextPage = null;
                     }
-
-                    console.log("yo");
-                    console.log("queried: " + this.noPagesQueried);
-                    console.log("pages: " + this.noPages);
 
                     // As long as there are still pages that have not been queried, loop through all pages
                     // For a page that has not been queried before, fetch all child blocks
@@ -137,7 +134,7 @@
 
                                         edges.push({ from: page, to: obj.id })
 
-                                    } else if (obj.type == 'paragraph' || obj.type == 'bulleted_list_item') {
+                                    } else if (this.considerBacklinks && (obj.type == 'paragraph' || obj.type == 'bulleted_list_item')) {
 
                                         let content = [];
                                         if (obj.type == 'paragragh') content = obj.paragraph.rich_text;
