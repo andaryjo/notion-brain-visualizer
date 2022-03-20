@@ -10,7 +10,7 @@ This tool uses the official [Notion API](https://developers.notion.com/) to quer
 
 ## Technology Stack
 
-The repository contains a [Node.js}(https://nodejs.org/en/) application running [Hapi](https://hapi.dev/) webserver. This server serves the static HTML files for the web application and proxies the API call to the Notion API. **The sigle purpose of the webserver is to act as proxy**, because the Notion API's Cross-Origin Resource Sharing policies do not allow API requests directly out of the browser. However, all required business logic is contained in the client-side web application, so if the Notion team ever were to change their minds on this, the web application could be used standalone.
+The repository contains a [Node.js](https://nodejs.org/en/) application running a [Hapi](https://hapi.dev/) webserver. This server serves the static HTML files for the web application and proxies the API call to the Notion API. **The single purpose of the webserver is to act as proxy**, because the Notion API's Cross-Origin Resource Sharing policies do not allow API requests directly out of the browser. However, all required business logic is contained in the client-side web application, so if the Notion team ever were to change their minds on this, the web application could be used standalone.
 
 The web application uses [vis.js](https://visjs.org/) to render the graph.
 
