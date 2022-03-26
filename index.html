@@ -112,66 +112,77 @@
                     // If a child block is a subpage, enter the connection and add the mentioned page to the pages array
 
                     while (this.noPagesQueried < this.noPages) {
-                        for (page in pages) {
+                        let activePromises = [];
+
+                        for (const page in pages) {
                             if (pages[page].queried) continue;
+                            if (activePromises.length >= 100) break;
 
-                            this.buttonText = `Fetching ${pages[page].name}`
-                            console.log(`query children for page ${page} (${pages[page].name})`);
+                            activePromises.push(new Promise(async (resolve, reject) => {
 
-                            let nextBlock = '';
-                            while (nextBlock != null) {
-                                const data = await this.getBlockChildren(this.token, page, nextBlock);
+                                console.log(`query children for page ${page} (${pages[page].name})`);
 
-                                for (obj of data.results) {
-                                    let newPage = null;
+                                //pages[page].nextBlock = '';
+                                let nextBlock = '';
+                                while (nextBlock != null) {
+                                    const data = await this.getBlockChildren(this.token, page, nextBlock);
 
-                                    if (obj.type == 'child_page') {
+                                    for (obj of data.results) {
+                                        let newPage = null;
 
-                                        newPage = {
-                                            id: obj.id,
-                                            name: obj.child_page.title
+                                        if (obj.type == 'child_page') {
+
+                                            newPage = {
+                                                id: obj.id,
+                                                name: obj.child_page.title
+                                            }
+
+                                            edges.push({ from: page, to: obj.id })
+
+                                        } else if (this.considerBacklinks && (obj.type == 'paragraph' || obj.type == 'bulleted_list_item')) {
+
+                                            let content = [];
+                                            if (obj.type == 'paragragh') content = obj.paragraph.rich_text;
+                                            else if (obj.type == 'bulleted_list_item') content = obj.bulleted_list_item.rich_text;
+
+                                            for (textObj of content) {
+                                                if (textObj.type == 'mention') {
+                                                    newPage = {
+                                                        id: textObj.mention.page.id,
+                                                        name: textObj.plain_text
+                                                    }
+
+                                                    edges.push({ from: page, to: textObj.mention.page.id })
+                                                }
+                                            }
                                         }
 
-                                        edges.push({ from: page, to: obj.id })
-
-                                    } else if (this.considerBacklinks && (obj.type == 'paragraph' || obj.type == 'bulleted_list_item')) {
-
-                                        let content = [];
-                                        if (obj.type == 'paragragh') content = obj.paragraph.rich_text;
-                                        else if (obj.type == 'bulleted_list_item') content = obj.bulleted_list_item.rich_text;
-
-                                        for (textObj of content) {
-                                            if (textObj.type == 'mention') {
-                                                newPage = {
-                                                    id: textObj.mention.page.id,
-                                                    name: textObj.plain_text
+                                        if (newPage) {
+                                            if (!(newPage.id in pages)) {
+                                                pages[newPage.id] = {
+                                                    name: newPage.name,
+                                                    queried: false
                                                 }
 
-                                                edges.push({ from: page, to: textObj.mention.page.id })
+                                                console.log(`add new page ${newPage.id} (${newPage.name})`);
+                                                this.noPages++;
                                             }
                                         }
                                     }
 
-                                    if (newPage) {
-                                        if (!(newPage.id in pages)) {
-                                            pages[newPage.id] = {
-                                                name: newPage.name,
-                                                queried: false
-                                            }
-
-                                            console.log(`add new page ${newPage.id} (${newPage.name})`);
-                                            this.noPages++;
-                                        }
-                                    }
+                                    if (data.has_more) nextBlock = data.next_cursor;
+                                    else nextBlock = null;
                                 }
 
-                                if (data.has_more) nextBlock = data.next_cursor;
-                                else nextBlock = null;
-                            }
+                                pages[page].queried = true;
+                                this.noPagesQueried++;
+                                this.buttonText = `Fetched ${pages[page].name}`
+                                resolve();
 
-                            pages[page].queried = true;
-                            this.noPagesQueried++;
+                            }));
                         }
+
+                        await Promise.all(activePromises);
                     }
 
                     for (page in pages) {
